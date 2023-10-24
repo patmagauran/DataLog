@@ -30,6 +30,7 @@ class AppendOnlyVector
 	const T& at(size_t index) const;
 	T& at(size_t index);
 
+	void clear();
 	
 
 };
@@ -50,6 +51,17 @@ inline AppendOnlyVector<T>::AppendOnlyVector(const AppendOnlyVector& other)
 template<typename T>
 inline AppendOnlyVector<T>::~AppendOnlyVector()
 {
+}
+
+
+template<typename T>
+inline void AppendOnlyVector<T>::clear()
+{
+	std::lock_guard<std::mutex> lock(m_data_mutex);
+	m_data.clear();
+	m_data = std::vector<T>();
+	expandCap = 0;
+	this ->reserve(this->originalSize);
 }
 
 template<typename T>

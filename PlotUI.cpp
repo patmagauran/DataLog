@@ -1,16 +1,36 @@
 #include "PlotUI.h"
 #include "DataLog.h"
 
-PlotUI::PlotUI(const PlotDataContainer& plotData) : plotData(plotData)
+PlotUI::PlotUI(std::shared_ptr<PlotDataContainer> plotData) : plotData(plotData)
 {
 	plotThread = std::thread(&PlotUI::run, this);
 
 }
 
+void PlotUI::setPlotData(std::shared_ptr<PlotDataContainer> plotData)
+{
+	this->updating.store(true);
+	this->dataFree.wait(false);
+	this->plotData = plotData;
+	this->dataFree.store(false);
+	this->dataFree.notify_all();
+	this->updating.store(false);
+}
+
 PlotUI::~PlotUI()
 {
+	DataLog::pushEvent(EventType::DONE, "Plot UI Destroyed");
 	plotThread.join();
 }
+
+//When we set Plot data, we push an event
+//We will then acquire a lock on dataDone
+//When the plot thread sees the event, it will not update data plots
+//It will release a lock on the data
+//THen the set  plot data will acquire a lock on the data
+//Once the data has been set, it will release the lock on dataDone
+//The plot thread will then acquire a lock on dataDone and acquire a lock on the data and continue plotting
+
 
 void PlotUI::run()
 {
@@ -51,7 +71,7 @@ void PlotUI::run()
 		g_pd3dSrvDescHeap->GetGPUDescriptorHandleForHeapStart());
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	bool done = false;
-	while (!DataLog::isDone()) {
+	while (DataLog::uiSHouldBeRunning()) {
 		// Poll and handle messages (inputs, window resize, etc.)
 // See the WndProc() function below for our to dispatch events to the Win32 backend.
 		MSG msg;
@@ -85,8 +105,17 @@ void PlotUI::run()
 		//	ImPlot::PlotLine("My Line Plot", &simulationTime[0], &xAngularVelocity[0], simulationTime.size());
 		//	ImPlot::EndPlot();
 		//}
+		if (!updating && !dataFree) {
+			//We are not updating, so we can draw the plots
+			//Ensure we have lock on the data
+			this->drawPlots();
 
-		this->drawPlots();
+		}
+		else if (updating && !dataFree) {
+			//Release lock on the data
+			dataFree.store(true);
+			this->dataFree.notify_all();
+		}
 
 		ImGui::End();
 
@@ -147,17 +176,24 @@ void PlotUI::drawPlots() {
 	/*static ImPlotAxisFlags xflags = ImPlotAxisFlags_AutoFit | ImPlot;
 	static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;*/
 	//loop through plotData and draw plots
-	if (ImPlot::BeginSubplots("Data Plots", plotData.getIndexMap().size(), 1, ImVec2(-1, -1), flags)) {
-		for (const auto& [name, index] : plotData.getIndexMap()) {
 
-			const auto& data = plotData.getData()[index];
+	//Wrap plots in a scrollable window
+
+	if (plotData->getIndexMap().size() < 1) {
+		return;
+	}
+
+	if (ImPlot::BeginSubplots("Data Plots", plotData->getIndexMap().size(), 1, ImVec2(-1, 200* plotData->getIndexMap().size()), flags)) {
+		for (const auto& [name, index] : plotData->getIndexMap()) {
+
+			const auto& data = plotData->getData()[index];
 			if (name == "systemTime") {
 				systemTime = data.y[data.y.size()-1];
 				continue;
 			}
 			if (ImPlot::BeginPlot(name.c_str())) {
 				//ImPlot::SetupAxes("x", "y", xflags, yflags);
-				ImPlot::SetupAxesLimits(0, 10000, -1.5, 1.5, ImPlotCond_Once);
+				ImPlot::SetupAxesLimits(-0.01, 10000, -1.5, 1.5, ImPlotCond_Once);
 				ImPlot::PlotLine(name.c_str(), &data.x[0], &data.y[0], data.x.size());
 				ImPlot::EndPlot();
 			}

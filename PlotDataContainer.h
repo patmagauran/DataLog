@@ -26,6 +26,7 @@ private:
 		void putData(std::string plot, double x, double y);
 		const std::unordered_map<std::string, size_t>& getIndexMap() const;
 		const AppendOnlyVector<dataPoint>& getData() const;
+		void clear();
 };
 
 
@@ -39,9 +40,9 @@ inline void PlotDataContainer::putData(std::string plot, double xVal, double yVa
 		data[search->second].push_back(xVal, yVal);
 	}
 	else {
-		index_map[plot] = data.size();
 		data.push_back(dataPoint(allocated_points));
 		data[data.size() - 1].push_back(xVal, yVal);
+		index_map[plot] = data.size() - 1;
 	}
 }
 
@@ -53,6 +54,13 @@ inline const std::unordered_map<std::string, size_t>& PlotDataContainer::getInde
 inline const AppendOnlyVector<dataPoint> & PlotDataContainer::getData() const
 {
 	return this->data;
+}
+
+inline void PlotDataContainer::clear()
+{
+
+	//this->index_map.clear();
+	//this->data.clear();
 }
 
 // : allocated_plots(plots), allocated_points(points), data(AppendOnlyVector<AppendOnlyVector<double>>(plots)

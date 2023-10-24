@@ -20,15 +20,18 @@
 #include "PlotDataContainer.h"
 class PlotUI
 {
-
+	std::mutex m_data_mutex;
 	std::thread plotThread = std::thread();
+	std::atomic_bool updating = false;
+	std::atomic_bool dataFree = false;
 	float systemTime = 0.0f;
-	const PlotDataContainer& plotData;
+	std::shared_ptr<PlotDataContainer> plotData;
 	void drawPlots();
 	void run();
 
 	public:
-	PlotUI(const PlotDataContainer& plotData);
+	PlotUI(std::shared_ptr<PlotDataContainer> plotData);
+	void setPlotData(std::shared_ptr<PlotDataContainer> plotData);
 	~PlotUI();
 };
 
